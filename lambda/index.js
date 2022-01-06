@@ -79,24 +79,57 @@ const SessionResumedIntentHandler = { // TODO: check for cause.type == 'Connecti
         console.log("Session Resumed: " + JSON.stringify(handlerInput.requestEnvelope));
         const cause = handlerInput.requestEnvelope.request.cause;
         console.log(cause);
+
+        // Variables to set type of response received, status of the deeplink request and
+        // the speech output
+        var responseType;
+        var responseStatus;
+        var speechOutput;
         if(cause != null && cause.result != null) {
             if (cause.result.directLaunch != null) {
                 // handle V2 direct launch result
-                console.log("Direct launch primary result: " + JSON.stringify(cause.result.directLaunch.primary));
-                console.log("Direct launch fallback result: " + JSON.stringify(cause.result.directLaunch.fallback));
+                responseType = "v2DirectLaunch";
+                responseStatus = cause.result.directLaunch.primary.status;
             } else if (cause.result.sendToDevice != null) {
                 // handle V2 send to device result
-                console.log("Send to device result: " + JSON.stringify(cause.result.sendToDevice));
+                responseType = "v2SendToDevice";
+                responseStatus = cause.result.sendToDevice.status;
             } else if (cause.result.primary || cause.result.fallback) {
                 // This is needed only if code handles both V1 and V2 AppLink interface during V1 to V2 migration period
-                console.log("V1 primary result: " + JSON.stringify(cause.result.primary));
-                console.log("V1 fallback result: " + JSON.stringify(cause.result.fallback));
+                responseType = "v1DirectLaunch";
             } else {
                 // Unknown response
                 console.log("~~~~ Error: unknown response: " + JSON.stringify(cause.result));
             }
         }
-        return handlerInput.responseBuilder.withShouldEndSession(true).getResponse();
+
+        switch (responseType) {
+            case 'v2DirectLaunch':
+                if (responseStatus == 'SUCCESS') {
+                    speechOutput = "Requested action was successfully launched in the Shopping app. Good bye!";
+                } else {
+                    speechOutput = "There was an issue completing the requested action. Please try again";
+                }
+                break;
+            case 'v2SendToDevice': 
+                if (responseStatus == 'SUCCESS') {
+                    speechOutput = "Requested action completed successfully. Please check your mobile device(s).";
+                } else {
+                    speechOutput = "There was an issue completing the requested action. Please try again";
+                }
+                break;
+            default:
+                speechOutput = "Good bye!"
+        }
+
+        var responseBuilder = handlerInput.responseBuilder.speak(speechOutput);
+        if (responseType == 'v2SendToDevice') {
+            responseBuilder.reprompt(speechOutput);
+        } else {
+            responseBuilder.withShouldEndSession(true);
+        }
+
+        return responseBuilder.getResponse();
     }
 }
 
@@ -112,7 +145,7 @@ const OpenAppIntentHandler = {
     },
     handle(handlerInput) {
         const appLinkState = handlerInput.requestEnvelope.context[APP_LINK_STATE];
-        if(appLinkState) {
+        if (appLinkState) {
             if (appLinkState.supportedCatalogTypes) {
                 // This means request is V1, which should not happen after skill declares support for APP_LINKS_V2 interface.
                 // But we could use this branch if the same code base is used during migration for skills 
@@ -145,6 +178,7 @@ const OpenAppIntentHandler = {
 
         return handlerInput.responseBuilder
             .speak(CANNOT_SERVE_RESPONSE)
+            .withShouldEndSession(true)
             .getResponse();
     }
 };
@@ -158,41 +192,84 @@ const GetOrdersIntentHandler = {
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'GetOrdersIntent';
     },
     handle(handlerInput) {
-        const appLinkState = handlerInput.requestEnvelope.context[APP_LINK_STATE];
-        if(appLinkState) {
-            if (appLinkState.supportedCatalogTypes) {
-                // This means request is V1, which should not happen after skill declares support for APP_LINKS_V2 interface.
-                // But we could use this branch if the same code base is used during migration for skills 
-                // in both development and live stage that support different version of APP_LINKS interface.
-            } else if (appLinkState.sendToDevice || appLinkState.directLaunch) {
-                // create links per supported catalog type
-                let links = {
-                    GOOGLE_PLAY_STORE: {
-                        primary: {
-                            UNIVERSAL_LINK : {
-                                appIdentifier: AMAZON_ANDROID_PACKAGE,
-                                url: AMAZON_ORDER_HISTORY_URL
+        const sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.getOrderHistory = true;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
+
+        return handlerInput.responseBuilder
+            .speak("I found few orders from your order history, would you like to view them in the Amazon Shopping app?")
+            .reprompt("I found few orders from your order history, would you like to view them in the Amazon Shopping app?")
+            .getResponse();
+    }
+};
+
+/**
+ * Handler for GetOrdersIntent. Opens the order history page in the mobile app and falls back to the mobile website. (universal links)
+ */
+const NoIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.NoIntent';
+    },
+    handle(handlerInput) {
+
+        return handlerInput.responseBuilder
+            .speak("Ok, Good bye!")
+            .withShouldEndSession(true)
+            .getResponse();
+    }
+};
+
+/**
+ * Handler for AMAZON.YesIntent. Handles positive Customer response for the question asked for GetOrdersIntent
+ */
+const YesIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.YesIntent';
+    },
+    handle(handlerInput) {
+        const sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        if (sessionAttributes.getOrderHistory) {
+            const appLinkState = handlerInput.requestEnvelope.context[APP_LINK_STATE];
+            if (appLinkState) {
+                if (appLinkState.supportedCatalogTypes) {
+                    // This means request is V1, which should not happen after skill declares support for APP_LINKS_V2 interface.
+                    // But we could use this branch if the same code base is used during migration for skills 
+                    // in both development and live stage that support different version of APP_LINKS interface.
+                } else if (appLinkState.sendToDevice || appLinkState.directLaunch) {
+                    // create links per supported catalog type
+                    let links = {
+                        GOOGLE_PLAY_STORE: {
+                            primary: {
+                                UNIVERSAL_LINK : {
+                                    appIdentifier: AMAZON_ANDROID_PACKAGE,
+                                    url: AMAZON_ORDER_HISTORY_URL
+                                }
+                            }
+                        },
+                        IOS_APP_STORE: {
+                            primary: {
+                                UNIVERSAL_LINK: {
+                                    appIdentifier: AMAZON_IOS_ID,
+                                    url: AMAZON_ORDER_HISTORY_URL
+                                }
                             }
                         }
-                    },
-                    IOS_APP_STORE: {
-                        primary: {
-                            UNIVERSAL_LINK: {
-                                appIdentifier: AMAZON_IOS_ID,
-                                url: AMAZON_ORDER_HISTORY_URL
-                            }
-                        }
-                    }
-                };
-                const topic = "See your order history";
-                //Send the app links response!
-                return handlerInput.responseBuilder.addDirective(createAppLinkSkillConnection(links, topic, true
-                    )).getResponse();
+                    };
+                    const topic = "See your order history";
+                    //Send the app links response!
+                    return handlerInput.responseBuilder
+                        .speak("Sending you a deep link to order history page")
+                        .addDirective(createAppLinkSkillConnection(links, topic, true))
+                        .getResponse();
+                }
             }
         }
 
         return handlerInput.responseBuilder
             .speak(CANNOT_SERVE_RESPONSE)
+            .withShouldEndSession(true)
             .getResponse();
     }
 };
@@ -212,7 +289,7 @@ const SearchIntentHandler = {
         const searchQuery = Alexa.getSlotValue(handlerInput.requestEnvelope, "query");
 
         const appLinkState = handlerInput.requestEnvelope.context[APP_LINK_STATE];
-        if(appLinkState) {
+        if (appLinkState) {
             //If there is a query, append it as a query Param, otherwise just open the search page.
             let searchUrl = new url.URL(AMAZON_SEARCH_URL);
             let queryParams = new url.URLSearchParams();
@@ -256,6 +333,7 @@ const SearchIntentHandler = {
 
         return handlerInput.responseBuilder
             .speak(CANNOT_SERVE_RESPONSE)
+            .withShouldEndSession(true)
             .getResponse();
     }
 };
@@ -351,6 +429,8 @@ exports.handler = Alexa.SkillBuilders.custom()
         SessionResumedIntentHandler,
         CancelAndStopIntentHandler,
         SessionEndedRequestHandler,
+        YesIntentHandler,
+        NoIntentHandler,
         IntentReflectorHandler, // make sure IntentReflectorHandler is last so it doesn't override your custom intent handlers
     )
     .addErrorHandlers(

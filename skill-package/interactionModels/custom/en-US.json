@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "deep link sample",
+      "invocationName": "tech talk",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
@@ -9,6 +9,14 @@
         },
         {
           "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
           "samples": []
         },
         {
