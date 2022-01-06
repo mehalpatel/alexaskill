@@ -204,7 +204,7 @@ const GetOrdersIntentHandler = {
 };
 
 /**
- * Handler for GetOrdersIntent. Opens the order history page in the mobile app and falls back to the mobile website. (universal links)
+ * Handler for AMAZON.NoIntent. Currently exits the session with providing a friendly message.
  */
 const NoIntentHandler = {
     canHandle(handlerInput) {
