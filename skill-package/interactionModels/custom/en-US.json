@@ -12,6 +12,10 @@
           "samples": []
         },
         {
+          "name": "AMAZON.SendToPhoneIntent",
+          "samples": []
+        },
+        {
           "name": "AMAZON.YesIntent",
           "samples": []
         },

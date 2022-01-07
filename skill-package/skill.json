@@ -3,7 +3,7 @@
     "apis": {
       "custom": {
         "endpoint": {
-          "uri": "{SPECIFY_YOUR_SKILL_END_POINT}"
+          "uri": "arn:aws:lambda:us-east-1:987137543371:function:ask-AmazonSkill-default-skillSt-AlexaSkillFunction-qDQKbD3sCoTe"
         },
         "interfaces": [
           {
@@ -42,12 +42,12 @@
           ],
           "linkedCommonSchemes": {
             "IOS_APP_STORE": [
-                "MAPS",
-                "TEL"
+              "MAPS",
+              "TEL"
             ],
             "GOOGLE_PLAY_STORE": [
-                "MAPS",
-                "TEL"
+              "MAPS",
+              "TEL"
             ]
           },
           "linkedAndroidCommonIntents": [
